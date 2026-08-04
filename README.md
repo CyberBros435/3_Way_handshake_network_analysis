@@ -17,9 +17,7 @@ The project not only explains how a TCP connection is established but also follo
 
 Complete investigation report:
 
-```text
-report/report.md
-```
+**[report/report.md](report/report.md)**
 
 ---
 
@@ -136,9 +134,7 @@ Once these packets are exchanged successfully, the TCP session enters the **ESTA
 
 Detailed screenshots and packet analysis are available inside:
 
-```text
-report/report.md
-```
+**[report/report.md](report/report.md)**
 
 ---
 
