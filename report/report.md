@@ -1,477 +1,633 @@
-# REPORT.md
-
-# Three-Way Handshake Deep Analysis & Network Investigation Report
+# TCP Three-Way Handshake Deep Analysis & Network Investigation Report
 
 > **Project Type:** Cyber Security / Networking Analysis  
 > **Level:** Beginner to Intermediate  
-> **Author:** Mudasir Zia  
-> **Status:** Completed  
-> **Purpose:** Educational & Defensive Learning
+> **Status:** Completed
 
 ---
 
-# Project Overview
+# Objective
 
-This project documents my practical study and investigation of the TCP Three-Way Handshake.
+Capture a real TCP Three-Way Handshake using Wireshark, analyze every packet at the TCP flag and sequence-number level, then investigate the remote IP address using multiple OSINT and Threat Intelligence platforms to verify whether the communicating host is legitimate.
 
-Instead of only learning the theory, I analyzed the communication process, validated IP addresses, investigated network reputation, verified routing paths, checked threat intelligence sources, and documented the entire process with screenshots.
-
-The goal of this project is to understand how TCP communication begins before any actual data transfer takes place and how a security analyst can investigate communicating hosts using multiple security intelligence platforms.
-
-This report serves as the complete documentation of the project.
+This project follows a real SOC Analyst investigation workflow where network traffic is validated before it is considered trusted.
 
 ---
 
-# Learning Objectives
+# Environment
 
-- Understand TCP communication
-- Learn how TCP establishes reliable connections
-- Analyze SYN, SYN-ACK and ACK packets
-- Understand client/server communication
-- Learn packet sequence
-- Investigate source and destination IPs
-- Validate routing paths
-- Perform reputation analysis
-- Use multiple threat intelligence platforms
-- Document investigation like a SOC Analyst
-
----
-
-# Technologies Used
-
-- TCP/IP
-- Wireshark
-- Windows Command Prompt
-- Ping
-- Tracert
-- VirusTotal
-- Cisco Talos Intelligence
-- Shodan
-- Public IP Reputation Services
+| Component | Value |
+|-----------|-------|
+| Capture Tool | Wireshark |
+| Network Interface | Wi-Fi |
+| Local Host | `192.168.0.102` |
+| Remote Host | `98.70.192.224` |
+| Organization | Microsoft Corporation |
+| Cloud Provider | Microsoft Azure |
+| Destination Location | Pune, Maharashtra, India |
+| Protocol | TCP |
+| Destination Port | `443 (HTTPS)` |
 
 ---
 
-# Project Workflow
+# Wireshark Display Filter
 
-```
-Capture Traffic
-        │
-        ▼
-Identify TCP Session
-        │
-        ▼
-Locate SYN Packet
-        │
-        ▼
-Locate SYN-ACK Packet
-        │
-        ▼
-Locate ACK Packet
-        │
-        ▼
-Confirm Three-Way Handshake
-        │
-        ▼
-Investigate Source IP
-        │
-        ▼
-Investigate Destination IP
-        │
-        ▼
-Validate Connectivity
-        │
-        ▼
-Perform Threat Intelligence Analysis
-        │
-        ▼
-Document Findings
+```wireshark
+tcp.flags.syn == 1 or (tcp.seq == 1 and tcp.ack == 1 and tcp.len == 0)
 ```
 
 ---
 
-# Understanding TCP Three-Way Handshake
+# Local Network Verification
 
-TCP uses a three-step process before transmitting any application data.
+## Command
+
+```cmd
+ipconfig
+```
+
+## Evidence
+
+![Local IP configuration](w4.png)
+
+### Result
+
+Confirmed local IPv4 address:
+
+```text
+192.168.0.102
+```
+
+This matches the source IP observed throughout the packet capture, confirming that the traffic belongs to the local machine rather than a third-party capture.
 
 ---
 
-## Step 1 — SYN
+# Step 1 — Capturing the TCP Handshake
 
-The client initiates communication by sending a SYN packet to the server.
+Applied the Wireshark display filter to isolate only handshake-related packets.
 
-Purpose:
+## Evidence
 
-- Request connection
-- Synchronize sequence numbers
-- Begin TCP session
+![Wireshark Capture](wireshark_three_way_handshake_filter.png)
 
-### Screenshot
+![Filter Bar](w5.png)
 
-```
-images/sync.png
-```
+The filtered capture isolated the exact handshake sequence.
 
----
+![Three Way Handshake](3_way-handshake.png)
 
-## Step 2 — SYN-ACK
+Frames identified:
 
-The server responds with a SYN-ACK packet.
+```text
+Frame 57 → SYN
 
-Purpose:
+Frame 59 → SYN-ACK
 
-- Acknowledge client request
-- Send its own synchronization request
-- Confirm willingness to establish connection
-
-### Screenshot
-
-```
-images/sync_async.png
-```
-
----
-
-## Step 3 — ACK
-
-The client sends the final ACK packet.
-
-Purpose:
-
-- Confirm server response
-- Complete connection establishment
-- Allow data transmission
-
-### Screenshot
-
-```
-images/ack.png
+Frame 60 → ACK
 ```
 
 ---
 
-# Complete Three-Way Handshake
+# Step 2 — SYN Packet (Client → Server)
 
-The entire communication can be visualized as:
+Client initiates the TCP connection.
 
+## Evidence
+
+![SYN Packet](sync.png)
+
+![SYN Packet Details](w2.png)
+
+### Packet Information
+
+```text
+Source IP      : 192.168.0.102
+
+Destination IP : 98.70.192.224
+
+Destination Port : 443
+
+Flags          : 0x002 (SYN)
+
+Sequence Number: 0
+
+Window Size    : 64240
+
+MSS            : 1460
+
+Window Scaling : 256
+
+SACK Permitted : Yes
 ```
-Client                          Server
 
-SYN ---------------------------->
+### Analysis
 
-          <---------------------- SYN + ACK
+The client requests to establish a TCP connection while advertising its TCP capabilities including:
 
-ACK ---------------------------->
+- Maximum Segment Size (MSS)
+- Window Scaling
+- Selective Acknowledgement (SACK)
 
-Connection Established
+No application data is transmitted during this packet.
+
+---
+
+# Step 3 — SYN-ACK Packet (Server → Client)
+
+The server accepts the connection request.
+
+## Evidence
+
+![SYN ACK](sync_async.png)
+
+![SYN ACK Details](w3.png)
+
+### Packet Information
+
+```text
+Flags          : 0x012 (SYN, ACK)
+
+Sequence Number: 0
+
+Acknowledgment : 1
+
+Window Size    : 65535
+
+MSS            : 1440
 ```
 
-### Screenshot
+### Analysis
 
+The server acknowledges receipt of the client's SYN packet while simultaneously sending its own SYN request.
+
+This confirms:
+
+- Client request received
+- Server ready for communication
+- Server TCP options negotiated
+
+---
+
+# Step 4 — ACK Packet (Client → Server)
+
+Client completes the handshake.
+
+## Evidence
+
+![ACK Packet](ack.png)
+
+![ACK Details](w1.png)
+
+### Packet Information
+
+```text
+Flags              : 0x010 (ACK)
+
+Sequence Number    : 1
+
+Acknowledgment     : 1
+
+Calculated Window  : 132352
 ```
-images/3_way-handshake.png
+
+### Analysis
+
+The client acknowledges the server's SYN packet.
+
+At this point:
+
+```text
+TCP Connection State
+
+ESTABLISHED
+```
+
+Application data can now begin flowing between both hosts.
+
+---
+
+# Complete TCP Handshake
+
+```text
+Client (192.168.0.102)                     Server (98.70.192.224:443)
+
+        SYN (Seq=0)
+---------------------------------------------->
+
+                        SYN + ACK (Seq=0 Ack=1)
+<----------------------------------------------
+
+        ACK (Seq=1 Ack=1)
+---------------------------------------------->
+
+             TCP CONNECTION ESTABLISHED
 ```
 
 ---
 
-# Source IP Investigation
+# Step 5 — Source IP Verification
 
-After identifying the TCP session, the source IP address was investigated.
+Source verification was performed using Windows networking utilities.
 
-Objectives:
-
-- Verify legitimacy
-- Confirm ownership
-- Identify reputation
-- Detect malicious history
-- Understand communication origin
-
-### Screenshot
-
+```cmd
+ipconfig
 ```
-images/src_ip_prove.png
+
+Verified source address:
+
+```text
+192.168.0.102
+```
+
+Result:
+
+- Source IP matches packet capture
+- Traffic originated from the local host
+- No indication of spoofed or relayed traffic
+
+---
+
+# Step 6 — Destination IP Investigation
+
+Destination IP:
+
+```text
+98.70.192.224
 ```
 
 ---
 
-# Destination IP Investigation
+## WHOIS Lookup
 
-The destination IP underwent multiple validation stages.
+Query:
 
-The investigation included:
+```text
+whois.arin.net/rest/ip/98.70.192.224
+```
 
-- IP ownership
-- Public exposure
-- Reputation checks
-- Routing validation
-- Reachability
-- Threat intelligence
+Evidence:
+
+![WHOIS](whois_rsw_on_dest_ip.png)
+
+### Findings
+
+```text
+Network Range
+
+98.70.128.0 - 98.70.255.255
+```
+
+```text
+Organization
+
+Microsoft Corporation
+```
+
+Result:
+
+The IP belongs to Microsoft's officially registered address space.
 
 ---
 
-## Destination Investigation — Part 1
+# Multi-Source Geolocation Verification
 
+The destination IP was validated across multiple independent geolocation providers.
+
+Evidence
+
+![Source 1](dest_ip_prove1.png)
+
+![Source 2](dest_ip_prove2.png)
+
+![Source 3](dest_ip_prove3.png)
+
+![Source 4](dest_ip_prove4.png)
+
+![Source 5](dest_ip_prove5.png)
+
+Consensus across providers:
+
+```text
+Organization
+
+Microsoft Corporation
 ```
-images/dest_ip_prove1.png
+
+```text
+Cloud Provider
+
+Microsoft Azure
 ```
+
+```text
+ASN
+
+8075
+```
+
+```text
+Location
+
+Pune
+
+Maharashtra
+
+India
+```
+
+Using multiple providers reduces the possibility of relying on outdated or inaccurate geolocation databases.
 
 ---
 
-## Destination Investigation — Part 2
-
-```
-images/dest_ip_prove2.png
-```
-
----
-
-## Destination Investigation — Part 3
-
-```
-images/dest_ip_prove3.png
-```
-
----
-
-## Destination Investigation — Part 4
-
-```
-images/dest_ip_prove4.png
-```
-
----
-
-## Destination Investigation — Part 5
-
-```
-images/dest_ip_prove5.png
-```
-
----
-
-# Connectivity Validation
-
-Before trusting communication, connectivity was validated.
+# Step 7 — Connectivity Validation
 
 ## Ping Test
 
-Purpose:
+Command
 
-- Verify host availability
-- Measure latency
-- Confirm reachability
-
-### Screenshot
-
+```cmd
+ping 98.70.192.224
 ```
-images/ping_on_dest_ip.png
+
+Evidence
+
+![Ping](ping_on_dest_ip.png)
+
+Results
+
+```text
+Packets Sent     : 4
+
+Packets Received : 4
+
+Packet Loss      : 0%
+
+Average RTT      : 204 ms
 ```
+
+Result
+
+The host is reachable and responding normally.
 
 ---
 
 ## Traceroute
 
-Purpose:
+Command
 
-- Observe routing path
-- Count network hops
-- Detect routing anomalies
-- Understand packet journey
-
-### Screenshot
-
+```cmd
+tracert 98.70.192.224
 ```
-images/tracert_on_dest_ip.png
+
+Evidence
+
+![Traceroute](tracert_on_dest_ip.png)
+
+Observation
+
+```text
+18 network hops
+
+Route traverses ISP infrastructure
+
+Transitions into Microsoft's network
+
+Destination successfully reached
 ```
+
+The routing path is consistent with legitimate Microsoft Azure infrastructure.
 
 ---
 
-# VirusTotal Investigation
+# Step 8 — Threat Intelligence Analysis
 
-VirusTotal was used to inspect the investigated IP.
+## VirusTotal Investigation
 
-Checks included:
+Evidence
 
-- Community reputation
-- Vendor detections
-- Malicious reports
-- Network indicators
-- Historical observations
+![VirusTotal 1](virustotal_1.png)
+
+![VirusTotal 2](virustotal_2.png)
+
+![VirusTotal 3](virustotal_3.png)
+
+Result
+
+```text
+Detections
+
+0 / Multiple Security Vendors
+```
+
+No known malicious history associated with the IP.
 
 ---
 
-## VirusTotal Result 1
+## Cisco Talos Intelligence
 
+Evidence
+
+![Cisco Talos](taleos_intellegence.png)
+
+Results
+
+```text
+Sender Reputation
+
+Neutral
 ```
-images/virustotal_1.png
+
+```text
+Web Reputation
+
+Neutral
 ```
+
+```text
+Blocklists
+
+SPAMCOP     : Clean
+
+ABUSEAT     : Clean
+
+SPAMHAUS    : Clean
+```
+
+The IP has a clean reputation across Talos intelligence services.
 
 ---
 
-## VirusTotal Result 2
+# Step 9 — Shodan Investigation
 
+Evidence
+
+![Shodan Overview](shodan_1.png)
+
+![Certificate](shodan_2.png)
+
+![Certificate Extensions](shodan_3.png)
+
+![Certificate Signature](shodan_4.png)
+
+## Findings
+
+### Open Ports
+
+```text
+80
+
+443
 ```
-images/virustotal_2.png
-```
+
+Only standard web service ports are exposed.
 
 ---
 
-## VirusTotal Result 3
+### TLS Certificate
 
+```text
+Issuer
+
+Microsoft TLS G2 RSA CA CSP 10
 ```
-images/virustotal_3.png
-```
+
+Certificate validity was confirmed.
 
 ---
 
-# Cisco Talos Intelligence Investigation
+### Hostnames
 
-Cisco Talos Intelligence provides reputation and threat intelligence for IP addresses.
+```text
+*.activity.windows.com
 
-Objectives:
-
-- Reputation
-- Classification
-- Threat score
-- Security history
-
-### Screenshot
-
+*.roaming.windows.com
 ```
-images/taleos_intellegence.png
-```
+
+These domains belong to Microsoft's cloud infrastructure.
 
 ---
 
-# Shodan Investigation
+# Overall Security Assessment
 
-Shodan was used to determine whether the destination host exposed internet-facing services.
+Every independent verification layer reached the same conclusion.
 
-The investigation focused on:
+```text
+WHOIS
 
-- Open ports
-- Running services
-- Public fingerprints
-- Network banners
-- Device exposure
-- Potential attack surface
-
----
-
-## Shodan Result 1
-
-```
-images/shodan_1.png
+✓ Microsoft Owned
 ```
 
----
+```text
+Geolocation
 
-## Shodan Result 2
+✓ Microsoft Azure
 
-```
-images/shodan_2.png
-```
-
----
-
-## Shodan Result 3
-
-```
-images/shodan_3.png
+✓ Pune, India
 ```
 
----
+```text
+Ping
 
-## Shodan Result 4
-
-```
-images/shodan_4.png
+✓ Reachable
 ```
 
----
+```text
+Traceroute
 
-# Security Analysis
+✓ Legitimate Microsoft Routing
+```
 
-During this project the communication process was validated from multiple perspectives.
+```text
+VirusTotal
 
-The analysis included:
+✓ Zero Detections
+```
 
-- TCP connection establishment
-- Packet sequence verification
-- Source IP validation
-- Destination IP verification
-- Connectivity confirmation
-- Route analysis
-- Threat intelligence review
-- Public exposure assessment
+```text
+Cisco Talos
 
-Rather than relying on a single source, multiple intelligence platforms were consulted to build confidence in the investigation.
+✓ Neutral Reputation
+```
+
+```text
+Shodan
+
+✓ Valid Microsoft Certificate
+
+✓ Minimal Attack Surface
+```
+
+Overall Conclusion:
+
+```text
+The investigated IP address belongs to legitimate Microsoft Azure infrastructure.
+
+No indicators of compromise, malicious reputation, suspicious routing, or unauthorized ownership were identified.
+
+The communication observed during the TCP Three-Way Handshake represents normal HTTPS traffic with a trusted Microsoft endpoint.
+```
 
 ---
 
 # Skills Demonstrated
 
-- TCP/IP Fundamentals
-- Network Packet Analysis
-- Wireshark Investigation
-- Three-Way Handshake Analysis
-- Threat Intelligence
-- IP Reputation Analysis
-- OSINT Investigation
-- Network Troubleshooting
-- Ping Analysis
-- Traceroute Analysis
-- Cisco Talos Usage
-- VirusTotal Investigation
-- Shodan Enumeration
-- Technical Documentation
+```text
+TCP/IP Fundamentals
 
----
+TCP Three-Way Handshake Analysis
 
-# Key Takeaways
+Wireshark Packet Inspection
 
-This project reinforced the importance of understanding how TCP establishes reliable communication before application data is exchanged.
+TCP Flag Interpretation
 
-Beyond packet analysis, it demonstrated how a security analyst can validate network communications through independent verification methods, reputation analysis, and publicly available threat intelligence.
+Sequence & Acknowledgment Number Analysis
 
-The investigation combined protocol analysis with defensive security practices, creating a structured workflow that closely resembles the investigation process followed by entry-level SOC analysts.
+Windows Network Diagnostics
 
----
+WHOIS Investigation
 
-# Repository Structure
+OSINT Investigation
 
-```
-.
-├── images/
-│   ├── 3_way-handshake.png
-│   ├── ack.png
-│   ├── sync.png
-│   ├── sync_async.png
-│   ├── src_ip_prove.png
-│   ├── dest_ip_prove1.png
-│   ├── dest_ip_prove2.png
-│   ├── dest_ip_prove3.png
-│   ├── dest_ip_prove4.png
-│   ├── dest_ip_prove5.png
-│   ├── ping_on_dest_ip.png
-│   ├── tracert_on_dest_ip.png
-│   ├── virustotal_1.png
-│   ├── virustotal_2.png
-│   ├── virustotal_3.png
-│   ├── taleos_intellegence.png
-│   ├── shodan_1.png
-│   ├── shodan_2.png
-│   ├── shodan_3.png
-│   └── shodan_4.png
-├── REPORT.md
-└── README.md
+Multi-source Geolocation Validation
+
+Ping & Traceroute Analysis
+
+Threat Intelligence Investigation
+
+VirusTotal Analysis
+
+Cisco Talos Intelligence
+
+Shodan Reconnaissance
+
+TLS Certificate Validation
+
+Network Documentation
+
+Security Reporting
 ```
 
 ---
 
-# Conclusion
+# Key Learning Outcomes
 
-This project successfully demonstrates the TCP Three-Way Handshake from both a networking and cyber security perspective.
+- Understood how the TCP Three-Way Handshake establishes reliable communication.
+- Learned to interpret raw TCP flags directly from packet details.
+- Verified IP ownership using WHOIS records.
+- Cross-validated geolocation using multiple independent sources.
+- Confirmed host availability using Ping and Traceroute.
+- Investigated reputation using VirusTotal and Cisco Talos.
+- Validated exposed services and TLS certificates using Shodan.
+- Practiced documenting a complete network investigation following a SOC Analyst methodology.
 
-The work goes beyond explaining SYN, SYN-ACK, and ACK packets by validating real-world communication through packet analysis, IP investigation, routing verification, and multiple threat intelligence platforms.
+---
 
-It reflects practical defensive analysis skills that are relevant to SOC analysts, blue team practitioners, networking students, and anyone beginning their journey in cyber security.
+# Future Improvements
+
+- Analyze handshakes involving suspicious or malicious IP addresses.
+- Compare legitimate versus malicious network behavior.
+- Import packet capture data into Splunk for SIEM analysis.
+- Create custom detection rules based on TCP handshake anomalies.
+- Expand the investigation to include DNS, TLS, and HTTP traffic analysis.
+
+---
